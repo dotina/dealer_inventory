@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-audit-logs-table
+      author: dealer-inventory
+      comment: >
+        Audit log table for tracking every endpoint hit and action.
+        For production with high TPS, consider range-partitioning this table
+        by timestamp (monthly) and adding a scheduled purge/archive job.
+      changes:
+        - createTable:
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: varchar(64)
+              - column:
+                  name: user_id
+                  type: varchar(255)
+              - column:
+                  name: role
+                  type: varchar(50)
+              - column:
+                  name: http_method
+                  type: varchar(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: endpoint
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: request_body
+                  type: text
+              - column:
+                  name: response_status
+                  type: int
+              - column:
+                  name: action
+                  type: varchar(30)
+              - column:
+                  name: entity_type
+                  type: varchar(100)
+              - column:
+                  name: entity_id
+                  type: uuid
+              - column:
+                  name: duration_ms
+                  type: bigint
+              - column:
+                  name: timestamp
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_audit_logs_tenant_id
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: tenant_id
+        - createIndex:
+            indexName: idx_audit_logs_timestamp
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: timestamp
+
