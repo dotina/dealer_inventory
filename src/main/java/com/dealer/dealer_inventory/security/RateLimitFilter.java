@@ -1,5 +1,7 @@
 package com.dealer.dealer_inventory.security;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.FilterChain;
@@ -15,7 +17,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Per-tenant token-bucket rate limiter using Bucket4j.
@@ -24,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * short-circuits with <b>429 Too Many Requests</b> and a {@code Retry-After} header.
  * </p>
  * <p>
- * A {@link ConcurrentHashMap} is used for O(1) bucket lookup; stale entries are
- * naturally bounded because each tenant reuses the same bucket instance.
+ * Buckets are stored in a Caffeine cache with access-based eviction to prevent
+ * unbounded memory growth from short-lived tenant IDs.
  * </p>
  */
 @Component
@@ -34,22 +35,28 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final boolean enabled;
     private final long capacity;
     private final long refillPerSecond;
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final Cache<String, Bucket> buckets;
 
     public RateLimitFilter(
             @Value("${app.rate-limit.enabled:true}") boolean enabled,
             @Value("${app.rate-limit.bucket-capacity:200}") long capacity,
-            @Value("${app.rate-limit.requests-per-second:100}") long refillPerSecond) {
+            @Value("${app.rate-limit.requests-per-second:100}") long refillPerSecond,
+            @Value("${app.rate-limit.bucket-idle-timeout-minutes:30}") long bucketIdleTimeoutMinutes,
+            @Value("${app.rate-limit.max-buckets:10000}") long maxBuckets) {
         this.enabled = enabled;
         this.capacity = capacity;
         this.refillPerSecond = refillPerSecond;
+        this.buckets = Caffeine.newBuilder()
+                .expireAfterAccess(Duration.ofMinutes(bucketIdleTimeoutMinutes))
+                .maximumSize(maxBuckets)
+                .build();
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        if (!enabled) {
+        if (!enabled || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -60,7 +67,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             key = request.getRemoteAddr();
         }
 
-        Bucket bucket = buckets.computeIfAbsent(key, k -> createBucket());
+        Bucket bucket = buckets.get(key, k -> createBucket());
 
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);
@@ -84,4 +91,3 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return Bucket.builder().addLimit(limit).build();
     }
 }
-

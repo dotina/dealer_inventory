@@ -26,15 +26,6 @@ public interface VehicleRepository extends JpaRepository<Vehicle, UUID>, JpaSpec
 
     List<Vehicle> findAllByDealerIdAndTenantId(UUID dealerId, String tenantId);
 
-    /* ── subscription=PREMIUM filter: vehicles whose dealer has PREMIUM subscription, tenant-scoped ── */
-
-    @Query("""
-           SELECT v FROM Vehicle v JOIN v.dealer d
-           WHERE v.tenantId = :tenantId
-             AND d.subscriptionType = com.dealer.dealer_inventory.inventory.entity.enums.SubscriptionType.PREMIUM
-           """)
-    Page<Vehicle> findAllByPremiumDealerAndTenantId(@Param("tenantId") String tenantId, Pageable pageable);
-
     /* ── cascade soft-delete for all vehicles of a dealer ── */
 
     @Modifying

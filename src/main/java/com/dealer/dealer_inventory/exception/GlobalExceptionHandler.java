@@ -1,6 +1,7 @@
 package com.dealer.dealer_inventory.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     /* ── 400 — missing tenant ─────────────────────────── */
@@ -39,6 +41,13 @@ public class GlobalExceptionHandler {
         Map<String, Object> body = baseBody(HttpStatus.BAD_REQUEST, "Validation failed", req);
         body.put("errors", fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /* ── 400 — invalid request parameters ─────────────── */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex,
+                                                                       HttpServletRequest req) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
     }
 
     /* ── 403 — forbidden / cross-tenant ───────────────── */
@@ -75,6 +84,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex,
                                                               HttpServletRequest req) {
+        log.error("Unhandled exception on {} {}", req.getMethod(), req.getRequestURI(), ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", req);
     }
 

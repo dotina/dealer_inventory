@@ -10,9 +10,13 @@ import static org.mockito.Mockito.*;
 
 class RateLimitFilterTest {
 
+    private RateLimitFilter createFilter(boolean enabled, long capacity, long refillPerSecond) {
+        return new RateLimitFilter(enabled, capacity, refillPerSecond, 30, 10_000);
+    }
+
     @Test
     void whenDisabled_requestPassesThrough() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(false, 200, 100);
+        RateLimitFilter filter = createFilter(false, 200, 100);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/dealers");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
@@ -24,7 +28,7 @@ class RateLimitFilterTest {
 
     @Test
     void whenEnabled_firstRequestAllowed() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(true, 10, 10);
+        RateLimitFilter filter = createFilter(true, 10, 10);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/dealers");
         request.addHeader("X-Tenant-Id", "tenant-1");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -39,7 +43,7 @@ class RateLimitFilterTest {
     @Test
     void whenBucketExhausted_returns429() throws Exception {
         // Capacity of 1, refill 1/sec — second request within same second will fail
-        RateLimitFilter filter = new RateLimitFilter(true, 1, 1);
+        RateLimitFilter filter = createFilter(true, 1, 1);
         FilterChain chain = mock(FilterChain.class);
 
         // First request — consumes the only token
@@ -62,7 +66,7 @@ class RateLimitFilterTest {
 
     @Test
     void differentTenants_haveIndependentBuckets() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(true, 1, 1);
+        RateLimitFilter filter = createFilter(true, 1, 1);
         FilterChain chain = mock(FilterChain.class);
 
         // Tenant A — consumes its token
@@ -82,7 +86,7 @@ class RateLimitFilterTest {
 
     @Test
     void missingTenantId_fallsBackToRemoteAddr() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(true, 1, 1);
+        RateLimitFilter filter = createFilter(true, 1, 1);
         FilterChain chain = mock(FilterChain.class);
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/dealers");
@@ -91,6 +95,18 @@ class RateLimitFilterTest {
         filter.doFilter(req, res, chain);
 
         verify(chain).doFilter(req, res);
+    }
+
+    @Test
+    void optionsRequest_bypassesRateLimit() throws Exception {
+        RateLimitFilter filter = createFilter(true, 1, 1);
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/dealers");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
     }
 }
 

@@ -68,10 +68,8 @@ public class VehicleService {
                                        Pageable pageable) {
         String tenantId = TenantContext.require();
 
-        // subscription=PREMIUM shortcut uses dedicated JPQL query
-        if (subscription == SubscriptionType.PREMIUM) {
-            return vehicleRepository.findAllByPremiumDealerAndTenantId(tenantId, pageable)
-                    .map(VehicleResponse::from);
+        if (priceMin != null && priceMax != null && priceMin.compareTo(priceMax) > 0) {
+            throw new IllegalArgumentException("priceMin must be less than or equal to priceMax");
         }
 
         Specification<Vehicle> spec = Specification.where(VehicleSpecification.hasTenant(tenantId));

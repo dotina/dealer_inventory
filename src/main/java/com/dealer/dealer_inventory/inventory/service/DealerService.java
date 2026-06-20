@@ -1,6 +1,5 @@
 package com.dealer.dealer_inventory.inventory.service;
 
-import com.dealer.dealer_inventory.exception.ForbiddenException;
 import com.dealer.dealer_inventory.exception.ResourceNotFoundException;
 import com.dealer.dealer_inventory.inventory.dto.DealerCreateRequest;
 import com.dealer.dealer_inventory.inventory.dto.DealerResponse;

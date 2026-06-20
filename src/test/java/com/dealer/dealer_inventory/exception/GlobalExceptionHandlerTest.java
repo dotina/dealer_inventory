@@ -65,6 +65,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleIllegalArgument_returns400() {
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/vehicles");
+        ResponseEntity<Map<String, Object>> resp =
+                handler.handleIllegalArgument(
+                        new IllegalArgumentException("priceMin must be less than or equal to priceMax"), req);
+
+        assertEquals(400, resp.getStatusCode().value());
+        assertEquals("priceMin must be less than or equal to priceMax", resp.getBody().get("message"));
+    }
+
+    @Test
     void handleGeneric_returns500() {
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/dealers");
         ResponseEntity<Map<String, Object>> resp =

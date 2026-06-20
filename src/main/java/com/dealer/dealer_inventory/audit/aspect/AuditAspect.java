@@ -4,6 +4,10 @@ import com.dealer.dealer_inventory.audit.annotation.Audited;
 import com.dealer.dealer_inventory.audit.entity.AuditAction;
 import com.dealer.dealer_inventory.audit.entity.AuditLog;
 import com.dealer.dealer_inventory.audit.service.AuditService;
+import com.dealer.dealer_inventory.exception.ForbiddenException;
+import com.dealer.dealer_inventory.exception.MissingTenantException;
+import com.dealer.dealer_inventory.exception.RateLimitExceededException;
+import com.dealer.dealer_inventory.exception.ResourceNotFoundException;
 import com.dealer.dealer_inventory.security.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -13,10 +17,13 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -61,24 +68,27 @@ public class AuditAspect {
         HttpServletResponse response = attrs.getResponse();
         long start = System.currentTimeMillis();
 
-        Object result;
+        Throwable thrown = null;
         try {
-            result = joinPoint.proceed();
+            return joinPoint.proceed();
+        } catch (Throwable t) {
+            thrown = t;
+            throw t;
         } finally {
             long duration = System.currentTimeMillis() - start;
             try {
-                recordAudit(joinPoint, request, response, duration);
+                recordAudit(joinPoint, request, response, duration, thrown);
             } catch (Exception ex) {
                 log.warn("Audit recording failed: {}", ex.getMessage());
             }
         }
-        return result;
     }
 
     private void recordAudit(ProceedingJoinPoint joinPoint,
                              HttpServletRequest request,
                              HttpServletResponse response,
-                             long durationMs) {
+                             long durationMs,
+                             Throwable thrown) {
 
         String httpMethod = request.getMethod();
         String endpoint = request.getRequestURI();
@@ -127,7 +137,9 @@ public class AuditAspect {
             } catch (IllegalArgumentException ignored) { }
         }
 
-        int responseStatus = response != null ? response.getStatus() : 0;
+        int responseStatus = thrown != null
+                ? resolveStatusFromException(thrown)
+                : (response != null ? response.getStatus() : 0);
 
         AuditLog auditLog = AuditLog.builder()
                 .tenantId(tenantId)
@@ -143,6 +155,24 @@ public class AuditAspect {
                 .build();
 
         auditService.saveLog(auditLog);
+    }
+
+    private int resolveStatusFromException(Throwable thrown) {
+        if (thrown instanceof ResourceNotFoundException) {
+            return HttpStatus.NOT_FOUND.value();
+        }
+        if (thrown instanceof ForbiddenException || thrown instanceof AccessDeniedException) {
+            return HttpStatus.FORBIDDEN.value();
+        }
+        if (thrown instanceof MissingTenantException
+                || thrown instanceof MethodArgumentNotValidException
+                || thrown instanceof IllegalArgumentException) {
+            return HttpStatus.BAD_REQUEST.value();
+        }
+        if (thrown instanceof RateLimitExceededException) {
+            return HttpStatus.TOO_MANY_REQUESTS.value();
+        }
+        return HttpStatus.INTERNAL_SERVER_ERROR.value();
     }
 }
 

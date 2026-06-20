@@ -154,18 +154,23 @@ class VehicleServiceTest {
     }
 
     @Test
-    void list_withPremiumSubscription_usesDedicatedQuery() {
+    void list_withPremiumSubscription_usesSpecificationPath() {
         Pageable pageable = PageRequest.of(0, 10);
         Vehicle v = buildVehicle(UUID.randomUUID(), buildDealer(UUID.randomUUID()));
         Page<Vehicle> page = new PageImpl<>(List.of(v), pageable, 1);
-        when(vehicleRepository.findAllByPremiumDealerAndTenantId(TENANT, pageable)).thenReturn(page);
+        when(vehicleRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
         Page<VehicleResponse> result = vehicleService.list(
-                null, null, null, null, SubscriptionType.PREMIUM, pageable);
+                "Model", VehicleStatus.AVAILABLE, null, null, SubscriptionType.PREMIUM, pageable);
 
         assertEquals(1, result.getTotalElements());
-        verify(vehicleRepository).findAllByPremiumDealerAndTenantId(TENANT, pageable);
-        verify(vehicleRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+        verify(vehicleRepository).findAll(any(Specification.class), eq(pageable));
+    }
+
+    @Test
+    void list_invalidPriceRange_throws() {
+        assertThrows(IllegalArgumentException.class, () -> vehicleService.list(
+                null, null, new BigDecimal("50000"), new BigDecimal("10000"), null, PageRequest.of(0, 10)));
     }
 
     @Test
